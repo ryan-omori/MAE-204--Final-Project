@@ -1,0 +1,24 @@
+clc;clear all;close all;
+Tse_initial = [0 0 1 0;
+               0 1 0 0;
+              -1 0 0 0.5;
+               0 0 0 1];
+Tsc_initial = [1 0 0 1;
+               0 1 0 0;
+               0 0 1 0.025;
+               0 0 0 1];
+Tsc_final = [0 1 0 0;
+            -1 0 0 -1;
+             0 0 1 0.025;
+             0 0 0 1];
+Tce_grasp = [0 0 1 0;
+             0 1 0 0;
+            -1 0 0 0;
+             0 0 0 1];
+Tce_standoff = [0 0 1 0;
+                0 1 0 0;
+               -1 0 0 0.1;
+                0 0 0 1];
+k=1;
+traj = TrajectoryGenerator(Tse_initial, Tsc_initial, Tsc_final, ...
+                           Tce_grasp, Tce_standoff, k);
