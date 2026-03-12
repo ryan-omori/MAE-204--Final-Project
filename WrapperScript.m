@@ -7,15 +7,15 @@ wheel0 = [-pi/4 pi/4 -pi/4 pi/4];
 state  = [initial_pos theta0 wheel0]';
 
 dt = 0.01;
-Tf = 10;
+Tf = 8;
 max_speed = 20;
 % Best K Values So far
 %Kp = 3 * eye(6);
 %Ki = 0.05 * eye(6);
 
 %Overshoot
-Kp = 3 * eye(6);
-Ki = .05 * eye(6);
+Kp = 2.4 * eye(6);
+Ki = .001 * eye(6);
 Xerr_int = zeros(6,1);
 
 %% Robot parameters
@@ -30,13 +30,13 @@ Blist = [0 0 1 0 0.033 0;
 M0e = [1 0 0 0.033; 0 1 0 0; 0 0 1 0.6546; 0 0 0 1];
 Tb0 = [1 0 0 0.1662; 0 1 0 0; 0 0 1 0.0026; 0 0 0 1];
 
-cube_int=[0 1 -1];
+cube_int=[0 1 1];
 Tsc_initial = [cos(cube_int(1)) -sin(cube_int(1)) 0 cube_int(2); 
                sin(cube_int(1)) cos(cube_int(1)) 0 cube_int(3); 
                0 0 1 0.025; 
                0 0 0 1];
 
-cube_goal=[-pi/2 1 1];
+cube_goal=[-pi/2 -1 -1];
 Tsc_final   = [cos(cube_goal(1)) -sin(cube_goal(1)) 0 cube_goal(2); 
                sin(cube_goal(1)) cos(cube_goal(1)) 0 cube_goal(3); 
                0 0 1 0.025; 
@@ -120,13 +120,23 @@ for i = 1:N-1
     Je = CalcJacobian(Blist, M0e, Tb0, r, l, w, state);
     sing_vals = svd(Je);
     cond_num = max(sing_vals) / max(min(sing_vals), 1e-6);
+    % Damped least squares for non-square Je (6x9
+    sing_vals = svd(Je);
+    cond_num = max(sing_vals) / max(min(sing_vals), 1e-6);
+    lambda = 0.01;
+    if cond_num > 50
+        Je_pinv = Je' * inv(Je*Je' + lambda^2 * eye(6));
+    else
+        Je_pinv = pinv(Je);
+    end
 
+   
+    [V, Vd, Xerr, Xerr_int, Je, Ad] = FeedbackControl(...
+        X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je);
+    controls = Je_pinv * V;
     Xerr_int = max(min(Xerr_int, 0.05), -0.05);
 
-    [V, Vd, controls, Xerr, Xerr_int, Je, Ad] = FeedbackControl(...
-        X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je);
 
-    controls = max(min(controls, max_speed), -max_speed);
 
     wheel_speeds = controls(1:4);
     joint_speeds = controls(5:9);

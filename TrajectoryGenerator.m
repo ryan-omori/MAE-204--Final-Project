@@ -3,6 +3,7 @@ function traj = TrajectoryGenerator(Tse_initial, Tsc_initial, Tsc_final, ...
                                     Tce_grasp, Tce_standoff,Tf,dt)
 k=1;
 method=5;
+
 N = (Tf*k)/dt;
 
 % Compute useful transforms
