@@ -9,13 +9,10 @@ state  = [initial_pos theta0 wheel0]';
 dt = 0.01;
 Tf = 8;
 max_speed = 20;
-% Best K Values So far
-Kp = 2.4 * eye(6);
-Ki = .001 * eye(6);
 
 %Overshoot
-%Kp = 5 * eye(6);
-%Ki = 1 * eye(6);
+Kp = 12 * eye(6);
+Ki = 1.5 * eye(6);
 
 %Initialize Error
 Xerr_int = zeros(6,1);
@@ -159,7 +156,7 @@ robot_traj(N,1:12) = state(1:12)';
 robot_traj(N,13)   = traj(N,13);
 
 %% Write CSV
-writematrix(robot_traj, 'BestSim.csv')
+writematrix(robot_traj, 'OvershootSim.csv')
 
 %% Plot error
 figure
