@@ -1,4 +1,4 @@
-function [Vb,Vd, Xerr, Xerr_int,Je,Ad] = FeedbackControl(X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je)
+function [Vb,Vd, Xerr, Xerr_int,Ad] = FeedbackControl(X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je)
 
 Xerr = se3ToVec(MatrixLog6(TransInv(X)*Xd));
 Xerr_int = Xerr_int + Xerr*dt;

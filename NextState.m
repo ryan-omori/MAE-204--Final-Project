@@ -54,7 +54,6 @@ rot = [
     0 cos(phi) -sin(phi);
     0 sin(phi)  cos(phi)
 ];
-
 delta_q = rot * delta_qb;
 
 phi_next = phi + delta_q(1);

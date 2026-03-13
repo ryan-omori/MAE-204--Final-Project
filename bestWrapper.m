@@ -1,23 +1,18 @@
 clc; clear; close;
 
 %% Initial configuration
-initial_pos = [.2 -.2 -.2];
-theta0 = [0 0 0 0 0];
+initial_pos = [pi/6 0 -.2];
+theta0 = [0, -0.5, -0.5, -0.5, 0];
 wheel0 = [-pi/4 pi/4 -pi/4 pi/4];
 state  = [initial_pos theta0 wheel0]';
 
 dt = 0.01;
-Tf = 8;
-max_speed = 20;
+Tf = 10;
+max_speed = 10;
 % Best K Values So far
-Kp = 2.4 * eye(6);
-Ki = .001 * eye(6);
+Kp = 2 * eye(6);
+Ki = 0.001 * eye(6);
 
-%Overshoot
-%Kp = 5 * eye(6);
-%Ki = 1 * eye(6);
-
-%Initialize Error
 Xerr_int = zeros(6,1);
 
 %% Robot parameters
@@ -48,7 +43,7 @@ Tsc_final   = [cos(cube_goal(1)) -sin(cube_goal(1)) 0 cube_goal(2);
 angle_attack = 3*pi/4;
 Tce_grasp    = [cos(angle_attack) 0 sin(angle_attack) 0;
                 0 1 0 0;
-               -sin(angle_attack) 0 cos(angle_attack) -.01;
+               -sin(angle_attack) 0 cos(angle_attack) 0;
                 0 0 0 1];
 
 Tce_standoff = [cos(angle_attack) 0 sin(angle_attack) 0;
@@ -91,6 +86,9 @@ traj(2*seg_N+1 : 6*seg_N, 13) = 1;
 N = M;  % total number of trajectory points
 robot_traj = zeros(N, 13);
 Xerr_log   = zeros(N, 6);
+% Joint limits (radians) - tune to your arm's actual limits
+joint_min = [-2.5, -1.8, -1.8, -1.8, -2.5];
+joint_max = [ 2.5,  1.8,  1.8,  1.8,  2.5];
 
 %% MAIN LOOP
 for i = 1:N-1
@@ -99,15 +97,13 @@ for i = 1:N-1
     y     = state(3);
     theta = state(4:8);
 
-    % Compute actual current end-effector pose from FK
     T0e = FKinBody(M0e, Blist, theta);
     Tsb = [cos(phi) -sin(phi) 0 x;
            sin(phi)  cos(phi) 0 y;
            0         0        1 0.0963;
            0         0        0 1];
-    X = Tsb * Tb0 * T0e;  % actual Tse
+    X = Tsb * Tb0 * T0e;
 
-    % Reference poses from trajectory matrix
     R      = reshape(traj(i,1:9), 3, 3)';
     p      = traj(i,10:12)';
     Xd     = [R p; 0 0 0 1];
@@ -118,26 +114,36 @@ for i = 1:N-1
 
     gripper = traj(i,13);
 
-    % Detect proximity to singularity via condition number
+    % --- Compute full Jacobian ---
     Je = CalcJacobian(Blist, M0e, Tb0, r, l, w, state);
+    % --- Feedback control ---
+    Xerr_int = max(min(Xerr_int, 0.05), -0.05);
+    [V, Vd, Xerr, Xerr_int, Ad] = FeedbackControl(...
+        X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je);
 
-    % Damped least squares for non-square Je (6x9
-    sing_vals = svd(Je);
-    cond_num = max(sing_vals) / max(min(sing_vals), 1e-6);
-    lambda = 0.01;
-    if cond_num > 50
-        Je_pinv = Je' * inv(Je*Je' + lambda^2 * eye(6));
-    else
-        Je_pinv = pinv(Je);
+
+
+    % --- Joint limit check ---
+    controls_test = pinv(Je) * V;
+    theta_next_test = theta + controls_test(5:9) * dt;
+    violated = testJointLimits(theta_next_test);
+
+    % Zero out columns of Je for violated joints (arm joints = cols 5-9)
+    Je_limited = Je;
+    for j = 1:5
+        if violated(j)
+            Je_limited(:, j+4) = 0;  % arm joints are cols 5-9 in Je
+        end
     end
 
-   
-    [V, Vd, Xerr, Xerr_int, Je, Ad] = FeedbackControl(...
-        X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je);
+    % --- Damped pseudoinverse on potentially modified Jacobian ---
+    lambda = 0.01;
+    [U, S, V_svd] = svd(Je_limited, 'econ');
+    s = diag(S);
+    s_damp = s ./ (s.^2 + lambda^2);
+    Je_pinv = V_svd * diag(s_damp) * U';
+
     controls = Je_pinv * V;
-    Xerr_int = max(min(Xerr_int, 0.05), -0.05);
-
-
 
     wheel_speeds = controls(1:4);
     joint_speeds = controls(5:9);
@@ -145,16 +151,13 @@ for i = 1:N-1
 
     robot_traj(i,1:12) = state(1:12)';
     robot_traj(i,13)   = gripper;
+    Xerr_log(i,:)      = Xerr';
 
     state = NextState(state, speeds, dt, max_speed, r, l, w);
-    % Joint limits (radians) - tune to your arm's actual limits
-    joint_min = [-2.5, -1.8, -1.8, -1.8, -2.5];
-    joint_max = [ 2.5,  1.8,  1.8,  1.8,  2.5];
-
-    state(4:8) = max(min(state(4:8), joint_max'), joint_min');
-    Xerr_log(i,:) = Xerr';
+    % Hard clamp as a safety net (secondary enforcement)
+%    state(4:8) = max(min(state(4:8), [2.5 1.8 1.8 1.8 2.5]'), ...
+ %                                    [-2.5 -1.8 -0.2 -0.2 -2.5]');
 end
-
 robot_traj(N,1:12) = state(1:12)';
 robot_traj(N,13)   = traj(N,13);
 
@@ -168,3 +171,10 @@ title("End Effector Error")
 xlabel("Time Step")
 ylabel("Error")
 legend("wx","wy","wz","vx","vy","vz")
+
+function violated = testJointLimits(theta)
+
+joint_min = [-2.5, -1.8, -1.8, -1.8, -2.5];
+joint_max = [ 2.5,  1.8, -0.2, -0.2,  2.5];  % joints 3,4 must stay < -0.2
+violated = (theta' < joint_min) | (theta' > joint_max);
+end
