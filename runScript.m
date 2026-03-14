@@ -33,8 +33,8 @@ w = 0.15;
 
 max_speed = 10;
 state = zeros(12,1);
-speeds = [0 0 0 0 0 10 10 10 10];  % wheel motion
-N = 500;
+speeds = [0 0 0 0 0 -10 10 10 -10];  % wheel motion
+N = 1000;
 kin_traj = zeros(N,13);
 
 for i = 1:N
@@ -85,10 +85,11 @@ Xerr_int = zeros(6,1);
 
 %Calc Jacobian
 Je=CalcJacobian(Blist,M0e,Tb0,r,l,w,state);
-
+Je_pinv=pinv(Je,1e-4);
 % Call FeedbackControl
-[Vb, Vd, controls, Xerr, Xerr_int, Je, Ad]= FeedbackControl(X, Xd, Xd_next, Kp, Ki, dt, Xerr_int,Je);
+[Vb, Vd, Xerr, Xerr_int, Ad]= FeedbackControl(X, Xd, Xd_next, Kp, Ki, dt, Xerr_int,Je);
 
+controls = Je_pinv * Vb;
 % Results
 Ad*Vb
 % Display Feedforward Reference twist

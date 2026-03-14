@@ -63,32 +63,16 @@ Tsb_init   = [cos(phi_init) -sin(phi_init) 0 x_init;
 Tse_initial = Tsb_init * Tb0 * T0e_init;
 %Tse_initial = [0 0 1 0; 0 1 0 0; -1 0 0 0.5; 0 0 0 1];
 %% Generate trajectory - returns cell array
-traj_cell = TrajectoryGenerator(Tse_initial, Tsc_initial, Tsc_final, ...
+traj = TrajectoryGenerator(Tse_initial, Tsc_initial, Tsc_final, ...
                                 Tce_grasp, Tce_standoff, Tf, dt);
 
-%% Convert cell array to matrix
-M = length(traj_cell);
-seg_N = M / 8;  % steps per segment
-
-traj = zeros(M, 13);
-for i = 1:M
-    T = traj_cell{i};
-    traj(i,1:9)  = [T(1,1) T(1,2) T(1,3) ...
-                    T(2,1) T(2,2) T(2,3) ...
-                    T(3,1) T(3,2) T(3,3)];
-    traj(i,10:12) = [T(1,4) T(2,4) T(3,4)];
-end
-
-% Gripper closed during segments 3-6 (indices 2*seg_N+1 to 6*seg_N)
-traj(:,13) = 0;
-traj(2*seg_N+1 : 6*seg_N, 13) = 1;
-
-N = M;  % total number of trajectory points
+N = length(traj);  % total number of trajectory points
 robot_traj = zeros(N, 13);
 Xerr_log   = zeros(N, 6);
-% Joint limits (radians) - tune to your arm's actual limits
+mu_w_log     = zeros(N, 1);   % angular manipulability  mu1(Aw)
+mu_v_log     = zeros(N, 1);   % linear manipulability   mu1(Av)
 joint_min = [-2.5, -1.8, -1.8, -1.8, -2.5];
-joint_max = [ 2.5,  1.8,  1.8,  1.8,  2.5];
+joint_max = [ 2.5,  1.8, -0.2, -0.2,  2.5];
 
 %% MAIN LOOP
 for i = 1:N-1
@@ -114,16 +98,28 @@ for i = 1:N-1
 
     gripper = traj(i,13);
 
-    % --- Compute full Jacobian ---
+    % Compute full Jacobian
     Je = CalcJacobian(Blist, M0e, Tb0, r, l, w, state);
-    % --- Feedback control ---
+  
+    Jw = Je(1:3, :);
+    Jv = Je(4:6, :);
+
+    Aw = Jw * Jw';
+    [~, Dw] = eig(Aw);
+    eigs_w=diag(Dw);
+    mu_w_log(i) =sqrt(max(eigs_w)/min(eigs_w));  
+    
+    Av = Jv * Jv';
+    [~, Dv] = eig(Av);
+    eigs_v=diag(Dv);
+    mu_v_log(i) =sqrt(max(eigs_v)/min(eigs_v));
+
+    % Feedback control
     Xerr_int = max(min(Xerr_int, 0.05), -0.05);
     [V, Vd, Xerr, Xerr_int, Ad] = FeedbackControl(...
         X, Xd, Xd_next, Kp, Ki, dt, Xerr_int, Je);
-
-
-
-    % --- Joint limit check ---
+    
+    % Joint limit check
     controls_test = pinv(Je) * V;
     theta_next_test = theta + controls_test(5:9) * dt;
     violated = testJointLimits(theta_next_test);
@@ -136,7 +132,7 @@ for i = 1:N-1
         end
     end
 
-    % --- Damped pseudoinverse on potentially modified Jacobian ---
+    % Damped pseudoinverse on potentially modified Jacobian
     lambda = 0.01;
     [U, S, V_svd] = svd(Je_limited, 'econ');
     s = diag(S);
@@ -154,9 +150,7 @@ for i = 1:N-1
     Xerr_log(i,:)      = Xerr';
 
     state = NextState(state, speeds, dt, max_speed, r, l, w);
-    % Hard clamp as a safety net (secondary enforcement)
-%    state(4:8) = max(min(state(4:8), [2.5 1.8 1.8 1.8 2.5]'), ...
- %                                    [-2.5 -1.8 -0.2 -0.2 -2.5]');
+    state(4:8) = max(min(state(4:8), joint_max'), joint_min');
 end
 robot_traj(N,1:12) = state(1:12)';
 robot_traj(N,13)   = traj(N,13);
@@ -171,7 +165,23 @@ title("End Effector Error")
 xlabel("Time Step")
 ylabel("Error")
 legend("wx","wy","wz","vx","vy","vz")
+t_axis = linspace(0, Tf, N);
 
+figure('Name','Manipulability')
+subplot(2,1,1)
+plot(t_axis, mu_w_log, 'LineWidth', 1.2)
+title('\mu_1(A_w) — Angular manipulability semi-axes')
+xlabel('Time (s)'); ylabel('\mu_1(A_w)'); grid on
+legend('\sigma_1','\sigma_2','\sigma_3')
+
+subplot(2,1,2)
+plot(t_axis, mu_v_log, 'LineWidth', 1.2)
+title('\mu_1(A_v) — Linear manipulability semi-axes')
+xlabel('Time (s)'); ylabel('\mu_1(A_v)'); grid on
+legend('\sigma_1','\sigma_2','\sigma_3')
+ 
+
+%% Joint Limit Helper Function
 function violated = testJointLimits(theta)
 
 joint_min = [-2.5, -1.8, -1.8, -1.8, -2.5];

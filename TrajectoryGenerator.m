@@ -45,7 +45,23 @@ end
 traj8 = ScrewTrajectory(Tse_release, Tse_standoff_final, k, N, method);
 
 % Combine Into Final Segment
-traj=[traj1 traj2 traj3 traj4 traj5 traj6 traj7 traj8];
+traj_cell=[traj1 traj2 traj3 traj4 traj5 traj6 traj7 traj8];
+%% Convert cell array to matrix
+M = length(traj_cell);
+seg_N = M / 8;  % steps per segment
+
+traj = zeros(M, 13);
+for i = 1:M
+    T = traj_cell{i};
+    traj(i,1:9)  = [T(1,1) T(1,2) T(1,3) ...
+                    T(2,1) T(2,2) T(2,3) ...
+                    T(3,1) T(3,2) T(3,3)];
+    traj(i,10:12) = [T(1,4) T(2,4) T(3,4)];
+end
+
+% Gripper closed during segments 3-6 (indices 2*seg_N+1 to 6*seg_N)
+traj(:,13) = 0;
+traj(2*seg_N+1 : 6*seg_N, 13) = 1;
 
 
 end
