@@ -1,4 +1,16 @@
 % Function for creating Trajectory
+% Inputs:
+% Tse_initial - initial end-effector pose (4x4 SE(3) matrix)
+% Tsc_initial - initial cube pose (4x4 SE(3) matrix)
+% Tsc_final - final cube pose (4x4 SE(3) matrix)
+% Tce_grasp - end-effector grasp pose relative to cube (4x4)
+% Tce_standoff - end-effector standoff pose relative to cube (4x4)
+% Tf  - total time for each segment
+% dt - time step
+%
+% Output:
+% traj - Nx13 trajectory matrix (rotation, position, gripper state)
+
 function traj = TrajectoryGenerator(Tse_initial, Tsc_initial, Tsc_final, ...
                                     Tce_grasp, Tce_standoff,Tf,dt)
 k=1;

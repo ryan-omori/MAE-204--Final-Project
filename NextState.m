@@ -1,4 +1,15 @@
 function next_state = NextState(state, speeds, dt, max_speed,r,l,w)
+% Inputs:
+% State - current state of robot
+% speeds - joint and wheel speeds from Feedback control
+% dt - time step
+% max_speed - max joint and wheel speed
+% r - Wheel Radius in meters
+% l - Distance from robot center to wheel along x-axis
+% w - Distance from robot center to wheel along y-axis
+% Outputs:
+% Predicted Next State
+
 % Force all inputs to column vectors
 state  = state(:);
 speeds = speeds(:);
